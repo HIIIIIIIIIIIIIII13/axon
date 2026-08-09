@@ -1,13 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+type PlanName = "free" | "plus" | "pro";
+
+type Profile = {
+  id: string;
+  email: string | null;
+  plan: PlanName;
+  is_admin: boolean;
+};
 
 const plans = [
   {
+    id: "free" as PlanName,
     name: "Free",
     price: "$0",
     description: "Explore Axon and get everyday AI help.",
-    button: "Current plan",
     popular: false,
     features: [
       "Axon AI chat",
@@ -18,10 +29,10 @@ const plans = [
     ],
   },
   {
+    id: "plus" as PlanName,
     name: "Plus",
     price: "$9.99",
     description: "More power for everyday work and creativity.",
-    button: "Get Plus",
     popular: true,
     features: [
       "Everything in Free",
@@ -36,10 +47,10 @@ const plans = [
     ],
   },
   {
+    id: "pro" as PlanName,
     name: "Pro",
     price: "$19.99",
     description: "The most powerful version of Axon.",
-    button: "Get Pro",
     popular: false,
     features: [
       "Everything in Plus",
@@ -57,6 +68,167 @@ const plans = [
 
 export default function PricingPage() {
   const router = useRouter();
+  const supabase = createClient();
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [changingPlan, setChangingPlan] = useState<PlanName | null>(null);
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  async function loadProfile() {
+    setLoading(true);
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setProfile(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, plan, is_admin")
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        console.error("Profile error:", error);
+        setProfile(null);
+        return;
+      }
+
+      setProfile(data as Profile);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function switchAdminPlan(plan: PlanName) {
+    if (!profile?.is_admin) return;
+
+    setChangingPlan(plan);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/admin/set-plan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          plan,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Could not change your plan.");
+        return;
+      }
+
+      setProfile((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          plan,
+        };
+      });
+    } catch (error) {
+      console.error("Plan switch error:", error);
+      alert("Could not change your plan.");
+    } finally {
+      setChangingPlan(null);
+    }
+  }
+
+  function handlePlanClick(plan: PlanName) {
+    if (!profile) {
+      router.push("/login");
+      return;
+    }
+
+    if (profile.plan === plan) {
+      return;
+    }
+
+    if (profile.is_admin) {
+      switchAdminPlan(plan);
+      return;
+    }
+
+    if (plan === "free") {
+      alert(
+        "Downgrading will be added when we connect subscription management."
+      );
+      return;
+    }
+
+    alert(
+      `${plan === "plus" ? "Plus" : "Pro"} checkout will be connected next.`
+    );
+  }
+
+  function getButtonText(plan: PlanName) {
+    if (loading) {
+      return "Loading...";
+    }
+
+    if (!profile) {
+      if (plan === "free") {
+        return "Start Free";
+      }
+
+      return plan === "plus" ? "Get Plus" : "Get Pro";
+    }
+
+    if (profile.plan === plan) {
+      return "Current plan";
+    }
+
+    if (profile.is_admin) {
+      if (changingPlan === plan) {
+        return "Switching...";
+      }
+
+      return `Switch to ${
+        plan.charAt(0).toUpperCase() + plan.slice(1)
+      }`;
+    }
+
+    if (plan === "free") {
+      return "Free";
+    }
+
+    return plan === "plus" ? "Upgrade to Plus" : "Upgrade to Pro";
+  }
+
+  function isDisabled(plan: PlanName) {
+    if (loading) return true;
+
+    if (profile?.plan === plan) return true;
+
+    if (changingPlan !== null) return true;
+
+    return false;
+  }
 
   return (
     <main className="min-h-screen bg-[#05070a] text-white">
@@ -77,12 +249,27 @@ export default function PricingPage() {
           </span>
         </button>
 
-        <button
-          onClick={() => router.push("/")}
-          className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 transition hover:bg-white/5 hover:text-white"
-        >
-          Back to Axon
-        </button>
+        <div className="flex items-center gap-3">
+          {profile && (
+            <div className="hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-right sm:block">
+              <p className="max-w-52 truncate text-xs text-white/60">
+                {profile.email}
+              </p>
+
+              <p className="text-xs font-semibold text-cyan-300">
+                {profile.plan.toUpperCase()}
+                {profile.is_admin ? " · ADMIN" : ""}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={() => router.push("/")}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 transition hover:bg-white/5 hover:text-white"
+          >
+            Back to Axon
+          </button>
+        </div>
       </header>
 
       {/* Hero */}
@@ -93,13 +280,21 @@ export default function PricingPage() {
 
         <h1 className="text-4xl font-bold tracking-tight md:text-6xl">
           Unlock more with{" "}
-          <span className="text-cyan-300">Axon</span>
+          <span className="text-cyan-300">
+            Axon
+          </span>
         </h1>
 
         <p className="mx-auto mt-5 max-w-2xl text-base text-white/50 md:text-lg">
           Start free. Upgrade when you want more intelligence, more tools,
           and more ways to create.
         </p>
+
+        {profile?.is_admin && (
+          <div className="mx-auto mt-5 w-fit rounded-xl border border-purple-400/20 bg-purple-400/5 px-4 py-2 text-sm text-purple-300">
+            Admin mode — you can switch plans without payment.
+          </div>
+        )}
 
         <div className="mt-6 inline-flex rounded-full border border-white/10 bg-white/5 p-1">
           <div className="rounded-full bg-white/10 px-5 py-2 text-sm">
@@ -114,87 +309,103 @@ export default function PricingPage() {
 
       {/* Plans */}
       <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-20 md:grid-cols-3">
-        {plans.map((plan) => (
-          <div
-            key={plan.name}
-            className={`relative flex flex-col rounded-3xl border p-7 ${
-              plan.popular
-                ? "border-cyan-400/60 bg-cyan-400/[0.06] shadow-[0_0_50px_rgba(34,211,238,0.10)]"
-                : "border-white/10 bg-white/[0.03]"
-            }`}
-          >
-            {plan.popular && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-cyan-400 px-4 py-1 text-xs font-bold text-black">
-                MOST POPULAR
-              </div>
-            )}
+        {plans.map((plan) => {
+          const isCurrent =
+            profile?.plan === plan.id;
 
-            <div>
-              <h2 className="text-2xl font-bold">{plan.name}</h2>
-
-              <p className="mt-2 min-h-12 text-sm leading-6 text-white/45">
-                {plan.description}
-              </p>
-            </div>
-
-            <div className="mt-7 flex items-end gap-2">
-              <span className="text-5xl font-bold tracking-tight">
-                {plan.price}
-              </span>
-
-              <span className="pb-1 text-sm text-white/40">
-                / month
-              </span>
-            </div>
-
-            <button
-              disabled={plan.name === "Free"}
-              onClick={() => {
-                if (plan.name !== "Free") {
-                  alert(
-                    `${plan.name} payments will be connected next.`
-                  );
-                }
-              }}
-              className={`mt-7 w-full rounded-xl px-4 py-3 font-semibold transition ${
-                plan.popular
-                  ? "bg-cyan-400 text-black hover:bg-cyan-300"
-                  : plan.name === "Free"
-                  ? "cursor-default bg-white/5 text-white/40"
-                  : "border border-white/15 bg-white/5 hover:bg-white/10"
+          return (
+            <div
+              key={plan.id}
+              className={`relative flex flex-col rounded-3xl border p-7 ${
+                isCurrent
+                  ? "border-cyan-400 bg-cyan-400/[0.08] shadow-[0_0_55px_rgba(34,211,238,0.12)]"
+                  : plan.popular
+                  ? "border-cyan-400/50 bg-cyan-400/[0.05]"
+                  : "border-white/10 bg-white/[0.03]"
               }`}
             >
-              {plan.button}
-            </button>
-
-            <div className="my-7 h-px bg-white/10" />
-
-            <p className="mb-4 text-sm font-semibold">
-              What&apos;s included
-            </p>
-
-            <div className="space-y-4">
-              {plan.features.map((feature) => (
-                <div
-                  key={feature}
-                  className="flex items-start gap-3 text-sm text-white/70"
-                >
-                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-xs text-cyan-300">
-                    ✓
-                  </div>
-
-                  <span>{feature}</span>
+              {isCurrent ? (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-cyan-400 px-4 py-1 text-xs font-bold text-black">
+                  CURRENT PLAN
                 </div>
-              ))}
+              ) : (
+                plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-cyan-400 px-4 py-1 text-xs font-bold text-black">
+                    MOST POPULAR
+                  </div>
+                )
+              )}
+
+              <div>
+                <h2 className="text-2xl font-bold">
+                  {plan.name}
+                </h2>
+
+                <p className="mt-2 min-h-12 text-sm leading-6 text-white/45">
+                  {plan.description}
+                </p>
+              </div>
+
+              <div className="mt-7 flex items-end gap-2">
+                <span className="text-5xl font-bold tracking-tight">
+                  {plan.price}
+                </span>
+
+                <span className="pb-1 text-sm text-white/40">
+                  / month
+                </span>
+              </div>
+
+              <button
+                disabled={isDisabled(plan.id)}
+                onClick={() =>
+                  handlePlanClick(plan.id)
+                }
+                className={`mt-7 w-full rounded-xl px-4 py-3 font-semibold transition ${
+                  isCurrent
+                    ? "cursor-default bg-white/5 text-white/40"
+                    : plan.popular
+                    ? "bg-cyan-400 text-black hover:bg-cyan-300"
+                    : "border border-white/15 bg-white/5 hover:bg-white/10"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                {getButtonText(plan.id)}
+              </button>
+
+              <div className="my-7 h-px bg-white/10" />
+
+              <p className="mb-4 text-sm font-semibold">
+                What&apos;s included
+              </p>
+
+              <div className="space-y-4">
+                {plan.features.map(
+                  (feature) => (
+                    <div
+                      key={feature}
+                      className="flex items-start gap-3 text-sm text-white/70"
+                    >
+                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-xs text-cyan-300">
+                        ✓
+                      </div>
+
+                      <span>
+                        {feature}
+                      </span>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
 
-      {/* Bottom message */}
+      {/* Bottom */}
       <section className="border-t border-white/10 px-6 py-10 text-center">
         <p className="text-sm text-white/35">
-          Cancel anytime. Plus and Pro payments are not active yet.
+          Plus and Pro payments are not active yet. We&apos;ll connect secure
+          checkout next.
         </p>
       </section>
     </main>
