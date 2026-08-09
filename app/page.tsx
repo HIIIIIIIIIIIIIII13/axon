@@ -25,6 +25,7 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [planChanging, setPlanChanging] = useState(false);
 
   useEffect(() => {
     loadAccount();
@@ -74,13 +75,79 @@ export default function Home() {
 
   async function logout() {
     await supabase.auth.signOut();
+
     setProfile(null);
     setAccountMenuOpen(false);
+
     window.location.href = "/";
   }
 
+  async function changeAdminPlan(
+    plan: "free" | "plus" | "pro"
+  ) {
+    if (!profile?.is_admin || planChanging) {
+      return;
+    }
+
+    setPlanChanging(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        alert("You need to log in.");
+        return;
+      }
+
+      const response = await fetch("/api/admin/set-plan", {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+
+        body: JSON.stringify({
+          plan,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(
+          data.error ||
+            "Axon couldn't change your plan."
+        );
+
+        return;
+      }
+
+      setProfile((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          plan,
+        };
+      });
+    } catch (error) {
+      console.error("Plan switch error:", error);
+
+      alert("Axon couldn't change your plan.");
+    } finally {
+      setPlanChanging(false);
+    }
+  }
+
   async function sendMessage() {
-    if (!message.trim() || loading) return;
+    if (!message.trim() || loading) {
+      return;
+    }
 
     const userMessage = message;
 
@@ -106,9 +173,11 @@ export default function Home() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify({
           messages: updatedMessages,
         }),
@@ -116,11 +185,16 @@ export default function Home() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || "Something went wrong");
+
+        throw new Error(
+          errorText || "Something went wrong"
+        );
       }
 
       if (!response.body) {
-        throw new Error("No response stream received");
+        throw new Error(
+          "No response stream received"
+        );
       }
 
       const reader = response.body.getReader();
@@ -129,9 +203,12 @@ export default function Home() {
       let axonReply = "";
 
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } =
+          await reader.read();
 
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         const chunk = decoder.decode(value, {
           stream: true,
@@ -142,7 +219,9 @@ export default function Home() {
         setMessages((prev) => {
           const newMessages = [...prev];
 
-          newMessages[newMessages.length - 1] = {
+          newMessages[
+            newMessages.length - 1
+          ] = {
             role: "axon",
             text: axonReply,
           };
@@ -151,14 +230,20 @@ export default function Home() {
         });
       }
     } catch (error) {
-      console.error("Axon chat error:", error);
+      console.error(
+        "Axon chat error:",
+        error
+      );
 
       setMessages((prev) => {
         const newMessages = [...prev];
 
-        newMessages[newMessages.length - 1] = {
+        newMessages[
+          newMessages.length - 1
+        ] = {
           role: "axon",
-          text: "I couldn't connect to my AI brain. Please try again.",
+          text:
+            "I couldn't connect to my AI brain. Please try again.",
         };
 
         return newMessages;
@@ -182,7 +267,9 @@ export default function Home() {
   }
 
   function getPlanLabel() {
-    if (!profile) return "";
+    if (!profile) {
+      return "";
+    }
 
     if (profile.is_admin) {
       return `${profile.plan.toUpperCase()} · ADMIN`;
@@ -192,14 +279,19 @@ export default function Home() {
   }
 
   function getInitial() {
-    if (!profile?.email) return "U";
+    if (!profile?.email) {
+      return "U";
+    }
 
-    return profile.email.charAt(0).toUpperCase();
+    return profile.email
+      .charAt(0)
+      .toUpperCase();
   }
 
   return (
     <main className="min-h-screen bg-[#05070a] text-white flex">
-      {/* Sidebar */}
+      {/* SIDEBAR */}
+
       <aside className="hidden md:flex w-64 flex-col border-r border-white/10 bg-black/30 p-4">
         <div className="flex items-center gap-3 px-2 py-2">
           <img
@@ -267,7 +359,7 @@ export default function Home() {
           ) : (
             <button
               onClick={goToLogin}
-              className="w-full rounded-xl px-2 py-2 text-left text-sm text-white/60 hover:bg-white/5 hover:text-white"
+              className="w-full rounded-xl px-2 py-2 text-left text-sm text-white/60 transition hover:bg-white/5 hover:text-white"
             >
               Login / Sign Up
             </button>
@@ -275,9 +367,11 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* MAIN */}
+
       <section className="flex min-h-screen flex-1 flex-col">
-        {/* Header */}
+        {/* HEADER */}
+
         <header className="flex items-center justify-between border-b border-white/10 bg-black/20 px-5 py-4 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <img
@@ -292,10 +386,14 @@ export default function Home() {
               </h2>
 
               <p className="text-xs text-cyan-300/70">
-                {loading ? "Thinking..." : "Online"}
+                {loading
+                  ? "Thinking..."
+                  : "Online"}
               </p>
             </div>
           </div>
+
+          {/* TOP RIGHT */}
 
           <div className="relative flex items-center gap-2 md:gap-3">
             <button
@@ -310,7 +408,9 @@ export default function Home() {
                 <>
                   <button
                     onClick={() =>
-                      setAccountMenuOpen(!accountMenuOpen)
+                      setAccountMenuOpen(
+                        !accountMenuOpen
+                      )
                     }
                     className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 transition hover:bg-white/10"
                   >
@@ -329,8 +429,10 @@ export default function Home() {
                     </div>
                   </button>
 
+                  {/* ACCOUNT MENU */}
+
                   {accountMenuOpen && (
-                    <div className="absolute right-0 top-14 z-50 w-72 rounded-2xl border border-white/10 bg-[#0b0e12] p-4 shadow-2xl">
+                    <div className="absolute right-0 top-14 z-50 w-80 rounded-2xl border border-white/10 bg-[#0b0e12] p-4 shadow-2xl">
                       <p className="truncate text-sm font-medium">
                         {profile.email}
                       </p>
@@ -347,17 +449,79 @@ export default function Home() {
                         )}
                       </div>
 
+                      {/* ADMIN SWITCHER */}
+
                       {profile.is_admin && (
-                        <button
-                          onClick={() =>
-                            alert(
-                              "Admin plan switching is coming next."
-                            )
-                          }
-                          className="mt-4 w-full rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-left text-sm text-cyan-200 transition hover:bg-cyan-400/10"
-                        >
-                          Admin plan switcher
-                        </button>
+                        <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-cyan-300">
+                            Admin plan switcher
+                          </p>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              disabled={
+                                planChanging
+                              }
+                              onClick={() =>
+                                changeAdminPlan(
+                                  "free"
+                                )
+                              }
+                              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                                profile.plan ===
+                                "free"
+                                  ? "bg-cyan-400 text-black"
+                                  : "bg-white/5 text-white/60 hover:bg-white/10"
+                              } disabled:opacity-50`}
+                            >
+                              Free
+                            </button>
+
+                            <button
+                              disabled={
+                                planChanging
+                              }
+                              onClick={() =>
+                                changeAdminPlan(
+                                  "plus"
+                                )
+                              }
+                              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                                profile.plan ===
+                                "plus"
+                                  ? "bg-cyan-400 text-black"
+                                  : "bg-white/5 text-white/60 hover:bg-white/10"
+                              } disabled:opacity-50`}
+                            >
+                              Plus
+                            </button>
+
+                            <button
+                              disabled={
+                                planChanging
+                              }
+                              onClick={() =>
+                                changeAdminPlan(
+                                  "pro"
+                                )
+                              }
+                              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                                profile.plan ===
+                                "pro"
+                                  ? "bg-cyan-400 text-black"
+                                  : "bg-white/5 text-white/60 hover:bg-white/10"
+                              } disabled:opacity-50`}
+                            >
+                              Pro
+                            </button>
+                          </div>
+
+                          {planChanging && (
+                            <p className="mt-3 text-center text-xs text-white/40">
+                              Changing plan...
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       <button
@@ -380,7 +544,8 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Chat */}
+        {/* CHAT */}
+
         <div className="flex-1 overflow-y-auto px-5 py-8">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
@@ -399,14 +564,17 @@ export default function Home() {
               </h2>
 
               <p className="mt-3 max-w-lg text-white/45">
-                Ask questions, create ideas, write code, solve problems,
-                and explore anything.
+                Ask questions, create ideas,
+                write code, solve problems, and
+                explore anything.
               </p>
 
               <div className="mt-8 grid w-full max-w-2xl gap-3 sm:grid-cols-2">
                 <button
                   onClick={() =>
-                    setMessage("Help me build an app")
+                    setMessage(
+                      "Help me build an app"
+                    )
                   }
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                 >
@@ -421,7 +589,9 @@ export default function Home() {
 
                 <button
                   onClick={() =>
-                    setMessage("Explain something interesting")
+                    setMessage(
+                      "Explain something interesting"
+                    )
                   }
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                 >
@@ -430,51 +600,60 @@ export default function Home() {
                   </p>
 
                   <p className="mt-1 text-sm text-white/40">
-                    Explain something interesting
+                    Explain something
+                    interesting
                   </p>
                 </button>
               </div>
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-6">
-              {messages.map((item, index) => (
-                <div
-                  key={index}
-                  className={
-                    item.role === "user"
-                      ? "flex justify-end"
-                      : "flex justify-start"
-                  }
-                >
-                  {item.role === "axon" && (
-                    <img
-                      src="/axon-logo.png"
-                      alt="Axon"
-                      className="mr-3 mt-1 h-8 w-8 object-contain"
-                    />
-                  )}
-
+              {messages.map(
+                (item, index) => (
                   <div
+                    key={index}
                     className={
                       item.role === "user"
-                        ? "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-cyan-400 px-4 py-3 text-black"
-                        : "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-white/90"
+                        ? "flex justify-end"
+                        : "flex justify-start"
                     }
                   >
-                    {item.text ||
-                      (loading &&
-                      index === messages.length - 1 &&
-                      item.role === "axon"
-                        ? "..."
-                        : "")}
+                    {item.role ===
+                      "axon" && (
+                      <img
+                        src="/axon-logo.png"
+                        alt="Axon"
+                        className="mr-3 mt-1 h-8 w-8 object-contain"
+                      />
+                    )}
+
+                    <div
+                      className={
+                        item.role ===
+                        "user"
+                          ? "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-cyan-400 px-4 py-3 text-black"
+                          : "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-white/90"
+                      }
+                    >
+                      {item.text ||
+                        (loading &&
+                        index ===
+                          messages.length -
+                            1 &&
+                        item.role ===
+                          "axon"
+                          ? "..."
+                          : "")}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
 
-        {/* Input */}
+        {/* INPUT */}
+
         <div className="border-t border-white/5 bg-black/20 px-4 py-5">
           <div className="mx-auto max-w-3xl">
             <div className="flex items-end gap-3 rounded-3xl border border-white/10 bg-white/5 p-3 shadow-[0_0_40px_rgba(0,0,0,0.3)] backdrop-blur-xl focus-within:border-cyan-400/30">
@@ -488,14 +667,18 @@ export default function Home() {
               <textarea
                 value={message}
                 onChange={(e) =>
-                  setMessage(e.target.value)
+                  setMessage(
+                    e.target.value
+                  )
                 }
                 onKeyDown={(e) => {
                   if (
-                    e.key === "Enter" &&
+                    e.key ===
+                      "Enter" &&
                     !e.shiftKey
                   ) {
                     e.preventDefault();
+
                     sendMessage();
                   }
                 }}
@@ -507,7 +690,10 @@ export default function Home() {
 
               <button
                 onClick={sendMessage}
-                disabled={!message.trim() || loading}
+                disabled={
+                  !message.trim() ||
+                  loading
+                }
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-400 font-bold text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
               >
                 ↑
@@ -515,7 +701,8 @@ export default function Home() {
             </div>
 
             <p className="mt-3 text-center text-xs text-white/25">
-              Axon can make mistakes. Check important information.
+              Axon can make mistakes. Check
+              important information.
             </p>
           </div>
         </div>
