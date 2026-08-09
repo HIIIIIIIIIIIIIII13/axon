@@ -1,16 +1,83 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type Message = {
   role: "user" | "axon";
   text: string;
 };
 
+type Profile = {
+  id: string;
+  email: string | null;
+  plan: "free" | "plus" | "pro";
+  is_admin: boolean;
+};
+
 export default function Home() {
+  const supabase = createClient();
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [accountLoading, setAccountLoading] = useState(true);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  useEffect(() => {
+    loadAccount();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadAccount();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function loadAccount() {
+    setAccountLoading(true);
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setProfile(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, plan, is_admin")
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        console.error("Profile error:", error);
+        setProfile(null);
+        return;
+      }
+
+      setProfile(data as Profile);
+    } finally {
+      setAccountLoading(false);
+    }
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+    setProfile(null);
+    setAccountMenuOpen(false);
+    window.location.href = "/";
+  }
 
   async function sendMessage() {
     if (!message.trim() || loading) return;
@@ -114,6 +181,22 @@ export default function Home() {
     window.location.href = "/pricing";
   }
 
+  function getPlanLabel() {
+    if (!profile) return "";
+
+    if (profile.is_admin) {
+      return `${profile.plan.toUpperCase()} · ADMIN`;
+    }
+
+    return profile.plan.toUpperCase();
+  }
+
+  function getInitial() {
+    if (!profile?.email) return "U";
+
+    return profile.email.charAt(0).toUpperCase();
+  }
+
   return (
     <main className="min-h-screen bg-[#05070a] text-white flex">
       {/* Sidebar */}
@@ -157,7 +240,7 @@ export default function Home() {
             className="w-full rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-left transition hover:bg-cyan-400/10"
           >
             <p className="text-sm font-medium text-cyan-200">
-              Upgrade Axon
+              Plans
             </p>
 
             <p className="mt-1 text-xs text-white/35">
@@ -165,21 +248,30 @@ export default function Home() {
             </p>
           </button>
 
-          <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-black">
-              U
-            </div>
+          {profile ? (
+            <div className="flex items-center gap-3 rounded-xl px-2 py-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-black">
+                {getInitial()}
+              </div>
 
-            <div>
-              <p className="text-sm font-medium">
-                User
-              </p>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {profile.email}
+                </p>
 
-              <p className="text-xs text-white/40">
-                Axon account
-              </p>
+                <p className="text-xs font-semibold text-cyan-300">
+                  {getPlanLabel()}
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <button
+              onClick={goToLogin}
+              className="w-full rounded-xl px-2 py-2 text-left text-sm text-white/60 hover:bg-white/5 hover:text-white"
+            >
+              Login / Sign Up
+            </button>
+          )}
         </div>
       </aside>
 
@@ -205,21 +297,86 @@ export default function Home() {
             </div>
           </div>
 
-          {/* New top-right buttons */}
-          <div className="flex items-center gap-2 md:gap-3">
-            <button
-              onClick={goToLogin}
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10 hover:text-white md:px-4 md:text-sm"
-            >
-              Login / Sign Up
-            </button>
-
+          <div className="relative flex items-center gap-2 md:gap-3">
             <button
               onClick={goToPricing}
               className="rounded-xl bg-cyan-400 px-3 py-2 text-xs font-semibold text-black transition hover:bg-cyan-300 md:px-4 md:text-sm"
             >
               Plans
             </button>
+
+            {!accountLoading &&
+              (profile ? (
+                <>
+                  <button
+                    onClick={() =>
+                      setAccountMenuOpen(!accountMenuOpen)
+                    }
+                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 transition hover:bg-white/10"
+                  >
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400 text-xs font-bold text-black">
+                      {getInitial()}
+                    </div>
+
+                    <div className="hidden text-left sm:block">
+                      <p className="max-w-36 truncate text-xs text-white/80">
+                        {profile.email}
+                      </p>
+
+                      <p className="text-[10px] font-semibold text-cyan-300">
+                        {getPlanLabel()}
+                      </p>
+                    </div>
+                  </button>
+
+                  {accountMenuOpen && (
+                    <div className="absolute right-0 top-14 z-50 w-72 rounded-2xl border border-white/10 bg-[#0b0e12] p-4 shadow-2xl">
+                      <p className="truncate text-sm font-medium">
+                        {profile.email}
+                      </p>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-300">
+                          {profile.plan.toUpperCase()}
+                        </span>
+
+                        {profile.is_admin && (
+                          <span className="rounded-full bg-purple-400/10 px-3 py-1 text-xs font-semibold text-purple-300">
+                            ADMIN
+                          </span>
+                        )}
+                      </div>
+
+                      {profile.is_admin && (
+                        <button
+                          onClick={() =>
+                            alert(
+                              "Admin plan switching is coming next."
+                            )
+                          }
+                          className="mt-4 w-full rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-left text-sm text-cyan-200 transition hover:bg-cyan-400/10"
+                        >
+                          Admin plan switcher
+                        </button>
+                      )}
+
+                      <button
+                        onClick={logout}
+                        className="mt-3 w-full rounded-xl border border-white/10 px-4 py-3 text-left text-sm text-white/60 transition hover:bg-white/5 hover:text-white"
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={goToLogin}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10 hover:text-white md:px-4 md:text-sm"
+                >
+                  Login / Sign Up
+                </button>
+              ))}
           </div>
         </header>
 
