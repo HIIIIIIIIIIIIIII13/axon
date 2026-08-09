@@ -92,22 +92,51 @@ export async function POST(request: Request) {
         );
       }
 
+      const customerId =
+        typeof session.customer === "string"
+          ? session.customer
+          : session.customer?.id;
+
+      const subscriptionId =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : session.subscription?.id;
+
+      if (!customerId || !subscriptionId) {
+        console.error(
+          "Missing Stripe customer or subscription ID."
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Missing Stripe subscription information.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
       const { error } = await supabaseAdmin
         .from("profiles")
         .update({
           plan,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscriptionId,
         })
         .eq("id", userId);
 
       if (error) {
         console.error(
-          "Supabase plan update error:",
+          "Supabase profile update error:",
           error
         );
 
         return NextResponse.json(
           {
-            error: "Could not update Axon plan.",
+            error:
+              "Could not update Axon subscription.",
           },
           {
             status: 500,
@@ -117,6 +146,14 @@ export async function POST(request: Request) {
 
       console.log(
         `Axon user ${userId} upgraded to ${plan}`
+      );
+
+      console.log(
+        `Stripe customer: ${customerId}`
+      );
+
+      console.log(
+        `Stripe subscription: ${subscriptionId}`
       );
     }
 
