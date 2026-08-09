@@ -80,6 +80,7 @@ export default function Home() {
       }
 
       setProfile(data as Profile);
+
       await loadConversations();
     } finally {
       setAccountLoading(false);
@@ -93,45 +94,78 @@ export default function Home() {
       const { data, error } = await supabase
         .from("conversations")
         .select("id, title, created_at, updated_at")
-        .order("updated_at", { ascending: false });
+        .order("updated_at", {
+          ascending: false,
+        });
 
       if (error) {
-        console.error("Conversation load error:", error);
+        console.error(
+          "Conversation load error:",
+          error
+        );
+
         return;
       }
 
-      setConversations((data ?? []) as Conversation[]);
+      setConversations(
+        (data ?? []) as Conversation[]
+      );
     } finally {
       setChatsLoading(false);
     }
   }
 
-  async function openConversation(conversationId: string) {
-    if (loading) return;
-
-    setActiveConversationId(conversationId);
-    setMessage("");
-
-    const { data, error } = await supabase
-      .from("messages")
-      .select("role, content, created_at")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Message load error:", error);
+  async function openConversation(
+    conversationId: string
+  ) {
+    if (loading) {
       return;
     }
 
-    const loadedMessages: Message[] = (data ?? []).map((item) => ({
-      role: item.role as "user" | "axon",
-      text: item.content,
-    }));
+    setActiveConversationId(
+      conversationId
+    );
+
+    setMessage("");
+
+    const { data, error } =
+      await supabase
+        .from("messages")
+        .select(
+          "role, content, created_at"
+        )
+        .eq(
+          "conversation_id",
+          conversationId
+        )
+        .order("created_at", {
+          ascending: true,
+        });
+
+    if (error) {
+      console.error(
+        "Message load error:",
+        error
+      );
+
+      return;
+    }
+
+    const loadedMessages: Message[] =
+      (data ?? []).map((item) => ({
+        role: item.role as
+          | "user"
+          | "axon",
+
+        text: item.content,
+      }));
 
     setMessages(loadedMessages);
   }
 
-  function createChatTitle(text: string) {
+  function createChatTitle(
+    text: string
+  ) {
     const cleaned = text
       .replace(/\s+/g, " ")
       .replace(/[?!.,]+$/g, "")
@@ -141,15 +175,23 @@ export default function Home() {
       return "New chat";
     }
 
-    const words = cleaned.split(" ");
+    const words =
+      cleaned.split(" ");
 
-    let title = words.slice(0, 7).join(" ");
+    let title = words
+      .slice(0, 7)
+      .join(" ");
 
     if (title.length > 45) {
-      title = title.slice(0, 45).trim();
+      title = title
+        .slice(0, 45)
+        .trim();
     }
 
-    return title.charAt(0).toUpperCase() + title.slice(1);
+    return (
+      title.charAt(0).toUpperCase() +
+      title.slice(1)
+    );
   }
 
   async function createConversation(
@@ -159,30 +201,43 @@ export default function Home() {
       return null;
     }
 
-    const title = createChatTitle(firstMessage);
+    const title =
+      createChatTitle(firstMessage);
 
-    const { data, error } = await supabase
-      .from("conversations")
-      .insert({
-        user_id: profile.id,
-        title,
-      })
-      .select("id, title, created_at, updated_at")
-      .single();
+    const { data, error } =
+      await supabase
+        .from("conversations")
+        .insert({
+          user_id: profile.id,
+          title,
+        })
+        .select(
+          "id, title, created_at, updated_at"
+        )
+        .single();
 
     if (error) {
-      console.error("Create conversation error:", error);
+      console.error(
+        "Create conversation error:",
+        error
+      );
+
       return null;
     }
 
-    const newConversation = data as Conversation;
+    const newConversation =
+      data as Conversation;
 
-    setActiveConversationId(newConversation.id);
+    setActiveConversationId(
+      newConversation.id
+    );
 
     setConversations((prev) => [
       newConversation,
       ...prev.filter(
-        (chat) => chat.id !== newConversation.id
+        (chat) =>
+          chat.id !==
+          newConversation.id
       ),
     ]);
 
@@ -194,40 +249,56 @@ export default function Home() {
     role: "user" | "axon",
     content: string
   ) {
-    const { error } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversationId,
-        role,
-        content,
-      });
+    const { error } =
+      await supabase
+        .from("messages")
+        .insert({
+          conversation_id:
+            conversationId,
+
+          role,
+          content,
+        });
 
     if (error) {
-      console.error("Save message error:", error);
+      console.error(
+        "Save message error:",
+        error
+      );
+
       return;
     }
 
-    const now = new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
-    const { error: updateError } = await supabase
-      .from("conversations")
-      .update({
-        updated_at: now,
-      })
-      .eq("id", conversationId);
+    const { error: updateError } =
+      await supabase
+        .from("conversations")
+        .update({
+          updated_at: now,
+        })
+        .eq(
+          "id",
+          conversationId
+        );
 
     if (updateError) {
       console.error(
         "Conversation update error:",
         updateError
       );
+
       return;
     }
 
     setConversations((prev) => {
-      const conversation = prev.find(
-        (chat) => chat.id === conversationId
-      );
+      const conversation =
+        prev.find(
+          (chat) =>
+            chat.id ===
+            conversationId
+        );
 
       if (!conversation) {
         return prev;
@@ -241,10 +312,71 @@ export default function Home() {
       return [
         updatedConversation,
         ...prev.filter(
-          (chat) => chat.id !== conversationId
+          (chat) =>
+            chat.id !==
+            conversationId
         ),
       ];
     });
+  }
+
+  async function deleteConversation(
+    conversationId: string
+  ) {
+    if (loading) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Delete this chat?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const { error } =
+      await supabase
+        .from("conversations")
+        .delete()
+        .eq(
+          "id",
+          conversationId
+        );
+
+    if (error) {
+      console.error(
+        "Delete conversation error:",
+        error
+      );
+
+      alert(
+        "Could not delete chat."
+      );
+
+      return;
+    }
+
+    setConversations((prev) =>
+      prev.filter(
+        (chat) =>
+          chat.id !==
+          conversationId
+      )
+    );
+
+    if (
+      activeConversationId ===
+      conversationId
+    ) {
+      setActiveConversationId(
+        null
+      );
+
+      setMessages([]);
+      setMessage("");
+    }
   }
 
   async function logout() {
@@ -260,19 +392,24 @@ export default function Home() {
   }
 
   async function sendMessage() {
-    if (!message.trim() || loading) {
+    if (
+      !message.trim() ||
+      loading
+    ) {
       return;
     }
 
-    const userMessage = message.trim();
+    const userMessage =
+      message.trim();
 
-    const updatedMessages: Message[] = [
-      ...messages,
-      {
-        role: "user",
-        text: userMessage,
-      },
-    ];
+    const updatedMessages: Message[] =
+      [
+        ...messages,
+        {
+          role: "user",
+          text: userMessage,
+        },
+      ];
 
     setMessages([
       ...updatedMessages,
@@ -285,18 +422,24 @@ export default function Home() {
     setMessage("");
     setLoading(true);
 
-    let conversationId = activeConversationId;
+    let conversationId =
+      activeConversationId;
 
     try {
-      // If logged in and this is a brand-new chat,
-      // create the conversation first.
-      if (profile && !conversationId) {
+      if (
+        profile &&
+        !conversationId
+      ) {
         conversationId =
-          await createConversation(userMessage);
+          await createConversation(
+            userMessage
+          );
       }
 
-      // Save the user's message.
-      if (profile && conversationId) {
+      if (
+        profile &&
+        conversationId
+      ) {
         await saveMessage(
           conversationId,
           "user",
@@ -304,21 +447,28 @@ export default function Home() {
         );
       }
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: updatedMessages,
-        }),
-      });
+      const response =
+        await fetch("/api/chat", {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            messages:
+              updatedMessages,
+          }),
+        });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText =
+          await response.text();
 
         throw new Error(
-          errorText || "Something went wrong"
+          errorText ||
+            "Something went wrong"
         );
       }
 
@@ -328,27 +478,38 @@ export default function Home() {
         );
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+      const reader =
+        response.body.getReader();
+
+      const decoder =
+        new TextDecoder();
 
       let axonReply = "";
 
       while (true) {
-        const { done, value } =
-          await reader.read();
+        const {
+          done,
+          value,
+        } = await reader.read();
 
         if (done) {
           break;
         }
 
-        const chunk = decoder.decode(value, {
-          stream: true,
-        });
+        const chunk =
+          decoder.decode(
+            value,
+            {
+              stream: true,
+            }
+          );
 
         axonReply += chunk;
 
         setMessages((prev) => {
-          const newMessages = [...prev];
+          const newMessages = [
+            ...prev,
+          ];
 
           newMessages[
             newMessages.length - 1
@@ -361,7 +522,6 @@ export default function Home() {
         });
       }
 
-      // Save Axon's completed response.
       if (
         profile &&
         conversationId &&
@@ -380,12 +540,15 @@ export default function Home() {
       );
 
       setMessages((prev) => {
-        const newMessages = [...prev];
+        const newMessages = [
+          ...prev,
+        ];
 
         newMessages[
           newMessages.length - 1
         ] = {
           role: "axon",
+
           text:
             "I couldn't connect to my AI brain. Please try again.",
         };
@@ -398,15 +561,21 @@ export default function Home() {
   }
 
   function newChat() {
-    if (loading) return;
+    if (loading) {
+      return;
+    }
 
     setMessages([]);
     setMessage("");
-    setActiveConversationId(null);
+
+    setActiveConversationId(
+      null
+    );
   }
 
   function goToLogin() {
-    window.location.href = "/login";
+    window.location.href =
+      "/login";
   }
 
   function getInitial() {
@@ -451,7 +620,9 @@ export default function Home() {
         </button>
 
         <div className="mt-6 text-xs uppercase tracking-wider text-white/30">
-          {profile ? "Recent chats" : "Chats"}
+          {profile
+            ? "Recent chats"
+            : "Chats"}
         </div>
 
         {/* RECENT CHATS */}
@@ -463,34 +634,72 @@ export default function Home() {
                 <p className="px-3 py-3 text-sm text-white/30">
                   Loading chats...
                 </p>
-              ) : conversations.length === 0 ? (
+              ) : conversations.length ===
+                0 ? (
                 <p className="px-3 py-3 text-sm text-white/30">
                   No chats yet
                 </p>
               ) : (
                 <div className="space-y-1">
-                  {conversations.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() =>
-                        openConversation(chat.id)
-                      }
-                      className={`w-full truncate rounded-xl px-3 py-3 text-left text-sm transition ${
-                        activeConversationId === chat.id
-                          ? "bg-cyan-400/10 text-cyan-200"
-                          : "text-white/60 hover:bg-white/5 hover:text-white"
-                      }`}
-                      title={chat.title}
-                    >
-                      {chat.title}
-                    </button>
-                  ))}
+                  {conversations.map(
+                    (chat) => (
+                      <div
+                        key={
+                          chat.id
+                        }
+                        className={`group flex items-center gap-1 rounded-xl transition ${
+                          activeConversationId ===
+                          chat.id
+                            ? "bg-cyan-400/10"
+                            : "hover:bg-white/5"
+                        }`}
+                      >
+                        <button
+                          onClick={() =>
+                            openConversation(
+                              chat.id
+                            )
+                          }
+                          className={`min-w-0 flex-1 truncate px-3 py-3 text-left text-sm ${
+                            activeConversationId ===
+                            chat.id
+                              ? "text-cyan-200"
+                              : "text-white/60 group-hover:text-white"
+                          }`}
+                          title={
+                            chat.title
+                          }
+                        >
+                          {
+                            chat.title
+                          }
+                        </button>
+
+                        <button
+                          onClick={(
+                            event
+                          ) => {
+                            event.stopPropagation();
+
+                            deleteConversation(
+                              chat.id
+                            );
+                          }}
+                          className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs text-white/30 opacity-0 transition hover:bg-red-500/10 hover:text-red-300 group-hover:opacity-100"
+                          title="Delete chat"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </>
           ) : (
             <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/50">
-              Log in to save your chats
+              Log in to save your
+              chats
             </div>
           )}
         </div>
@@ -573,7 +782,9 @@ export default function Home() {
 
                     <div className="hidden text-left sm:block">
                       <p className="max-w-36 truncate text-xs text-white/80">
-                        {profile.email}
+                        {
+                          profile.email
+                        }
                       </p>
 
                       <p className="text-[10px] font-semibold text-cyan-300">
@@ -587,7 +798,9 @@ export default function Home() {
                   {accountMenuOpen && (
                     <div className="absolute right-0 top-14 z-50 w-80 rounded-2xl border border-white/10 bg-[#0b0e12] p-4 shadow-2xl">
                       <p className="truncate text-sm font-medium">
-                        {profile.email}
+                        {
+                          profile.email
+                        }
                       </p>
 
                       <div className="mt-2 flex items-center gap-2">
@@ -603,7 +816,9 @@ export default function Home() {
                       </div>
 
                       <button
-                        onClick={logout}
+                        onClick={
+                          logout
+                        }
                         className="mt-4 w-full rounded-xl border border-white/10 px-4 py-3 text-left text-sm text-white/60 transition hover:bg-white/5 hover:text-white"
                       >
                         Log out
@@ -613,7 +828,9 @@ export default function Home() {
                 </>
               ) : (
                 <button
-                  onClick={goToLogin}
+                  onClick={
+                    goToLogin
+                  }
                   className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10 hover:text-white md:px-4 md:text-sm"
                 >
                   Login / Sign Up
@@ -638,13 +855,15 @@ export default function Home() {
               </div>
 
               <h2 className="mt-7 text-3xl font-bold md:text-4xl">
-                What can Axon help with?
+                What can Axon help
+                with?
               </h2>
 
               <p className="mt-3 max-w-lg text-white/45">
-                Ask questions, create ideas,
-                write code, solve problems, and
-                explore anything.
+                Ask questions, create
+                ideas, write code, solve
+                problems, and explore
+                anything.
               </p>
 
               <div className="mt-8 grid w-full max-w-2xl gap-3 sm:grid-cols-2">
@@ -678,7 +897,8 @@ export default function Home() {
                   </p>
 
                   <p className="mt-1 text-sm text-white/40">
-                    Explain something interesting
+                    Explain something
+                    interesting
                   </p>
                 </button>
               </div>
@@ -686,11 +906,15 @@ export default function Home() {
           ) : (
             <div className="mx-auto max-w-3xl space-y-6">
               {messages.map(
-                (item, index) => (
+                (
+                  item,
+                  index
+                ) => (
                   <div
                     key={index}
                     className={
-                      item.role === "user"
+                      item.role ===
+                      "user"
                         ? "flex justify-end"
                         : "flex justify-start"
                     }
@@ -706,7 +930,8 @@ export default function Home() {
 
                     <div
                       className={
-                        item.role === "user"
+                        item.role ===
+                        "user"
                           ? "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-cyan-400 px-4 py-3 text-black"
                           : "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-white/90"
                       }
@@ -714,8 +939,10 @@ export default function Home() {
                       {item.text ||
                         (loading &&
                         index ===
-                          messages.length - 1 &&
-                        item.role === "axon"
+                          messages.length -
+                            1 &&
+                        item.role ===
+                          "axon"
                           ? "..."
                           : "")}
                     </div>
@@ -747,21 +974,27 @@ export default function Home() {
                 }
                 onKeyDown={(e) => {
                   if (
-                    e.key === "Enter" &&
+                    e.key ===
+                      "Enter" &&
                     !e.shiftKey
                   ) {
                     e.preventDefault();
+
                     sendMessage();
                   }
                 }}
                 placeholder="Message Axon..."
                 rows={1}
-                disabled={loading}
+                disabled={
+                  loading
+                }
                 className="max-h-40 flex-1 resize-none bg-transparent px-1 py-2.5 text-white outline-none placeholder:text-white/30 disabled:opacity-50"
               />
 
               <button
-                onClick={sendMessage}
+                onClick={
+                  sendMessage
+                }
                 disabled={
                   !message.trim() ||
                   loading
@@ -773,8 +1006,9 @@ export default function Home() {
             </div>
 
             <p className="mt-3 text-center text-xs text-white/25">
-              Axon can make mistakes. Check
-              important information.
+              Axon can make mistakes.
+              Check important
+              information.
             </p>
           </div>
         </div>
