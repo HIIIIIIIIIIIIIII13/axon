@@ -14,6 +14,13 @@ type Profile = {
   is_admin: boolean;
 };
 
+type Conversation = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export default function Home() {
   const supabase = createClient();
 
@@ -24,6 +31,11 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] =
+    useState<string | null>(null);
+  const [chatsLoading, setChatsLoading] = useState(false);
 
   useEffect(() => {
     loadAccount();
@@ -50,6 +62,8 @@ export default function Home() {
 
       if (userError || !user) {
         setProfile(null);
+        setConversations([]);
+        setActiveConversationId(null);
         return;
       }
 
@@ -66,15 +80,180 @@ export default function Home() {
       }
 
       setProfile(data as Profile);
+      await loadConversations();
     } finally {
       setAccountLoading(false);
     }
+  }
+
+  async function loadConversations() {
+    setChatsLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("conversations")
+        .select("id, title, created_at, updated_at")
+        .order("updated_at", { ascending: false });
+
+      if (error) {
+        console.error("Conversation load error:", error);
+        return;
+      }
+
+      setConversations((data ?? []) as Conversation[]);
+    } finally {
+      setChatsLoading(false);
+    }
+  }
+
+  async function openConversation(conversationId: string) {
+    if (loading) return;
+
+    setActiveConversationId(conversationId);
+    setMessage("");
+
+    const { data, error } = await supabase
+      .from("messages")
+      .select("role, content, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Message load error:", error);
+      return;
+    }
+
+    const loadedMessages: Message[] = (data ?? []).map((item) => ({
+      role: item.role as "user" | "axon",
+      text: item.content,
+    }));
+
+    setMessages(loadedMessages);
+  }
+
+  function createChatTitle(text: string) {
+    const cleaned = text
+      .replace(/\s+/g, " ")
+      .replace(/[?!.,]+$/g, "")
+      .trim();
+
+    if (!cleaned) {
+      return "New chat";
+    }
+
+    const words = cleaned.split(" ");
+
+    let title = words.slice(0, 7).join(" ");
+
+    if (title.length > 45) {
+      title = title.slice(0, 45).trim();
+    }
+
+    return title.charAt(0).toUpperCase() + title.slice(1);
+  }
+
+  async function createConversation(
+    firstMessage: string
+  ): Promise<string | null> {
+    if (!profile) {
+      return null;
+    }
+
+    const title = createChatTitle(firstMessage);
+
+    const { data, error } = await supabase
+      .from("conversations")
+      .insert({
+        user_id: profile.id,
+        title,
+      })
+      .select("id, title, created_at, updated_at")
+      .single();
+
+    if (error) {
+      console.error("Create conversation error:", error);
+      return null;
+    }
+
+    const newConversation = data as Conversation;
+
+    setActiveConversationId(newConversation.id);
+
+    setConversations((prev) => [
+      newConversation,
+      ...prev.filter(
+        (chat) => chat.id !== newConversation.id
+      ),
+    ]);
+
+    return newConversation.id;
+  }
+
+  async function saveMessage(
+    conversationId: string,
+    role: "user" | "axon",
+    content: string
+  ) {
+    const { error } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        role,
+        content,
+      });
+
+    if (error) {
+      console.error("Save message error:", error);
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    const { error: updateError } = await supabase
+      .from("conversations")
+      .update({
+        updated_at: now,
+      })
+      .eq("id", conversationId);
+
+    if (updateError) {
+      console.error(
+        "Conversation update error:",
+        updateError
+      );
+      return;
+    }
+
+    setConversations((prev) => {
+      const conversation = prev.find(
+        (chat) => chat.id === conversationId
+      );
+
+      if (!conversation) {
+        return prev;
+      }
+
+      const updatedConversation = {
+        ...conversation,
+        updated_at: now,
+      };
+
+      return [
+        updatedConversation,
+        ...prev.filter(
+          (chat) => chat.id !== conversationId
+        ),
+      ];
+    });
   }
 
   async function logout() {
     await supabase.auth.signOut();
 
     setProfile(null);
+    setConversations([]);
+    setActiveConversationId(null);
+    setMessages([]);
     setAccountMenuOpen(false);
 
     window.location.href = "/";
@@ -85,7 +264,7 @@ export default function Home() {
       return;
     }
 
-    const userMessage = message;
+    const userMessage = message.trim();
 
     const updatedMessages: Message[] = [
       ...messages,
@@ -106,7 +285,25 @@ export default function Home() {
     setMessage("");
     setLoading(true);
 
+    let conversationId = activeConversationId;
+
     try {
+      // If logged in and this is a brand-new chat,
+      // create the conversation first.
+      if (profile && !conversationId) {
+        conversationId =
+          await createConversation(userMessage);
+      }
+
+      // Save the user's message.
+      if (profile && conversationId) {
+        await saveMessage(
+          conversationId,
+          "user",
+          userMessage
+        );
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -163,6 +360,19 @@ export default function Home() {
           return newMessages;
         });
       }
+
+      // Save Axon's completed response.
+      if (
+        profile &&
+        conversationId &&
+        axonReply.trim()
+      ) {
+        await saveMessage(
+          conversationId,
+          "axon",
+          axonReply
+        );
+      }
     } catch (error) {
       console.error(
         "Axon chat error:",
@@ -188,8 +398,11 @@ export default function Home() {
   }
 
   function newChat() {
+    if (loading) return;
+
     setMessages([]);
     setMessage("");
+    setActiveConversationId(null);
   }
 
   function goToLogin() {
@@ -231,20 +444,60 @@ export default function Home() {
 
         <button
           onClick={newChat}
-          className="mt-6 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-left font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+          disabled={loading}
+          className="mt-6 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-left font-medium text-cyan-100 transition hover:bg-cyan-400/20 disabled:opacity-50"
         >
           + New chat
         </button>
 
         <div className="mt-6 text-xs uppercase tracking-wider text-white/30">
-          Chats
+          {profile ? "Recent chats" : "Chats"}
         </div>
 
-        <div className="mt-3 rounded-xl bg-white/5 px-4 py-3 text-sm text-white/70">
-          New conversation
+        {/* RECENT CHATS */}
+
+        <div className="mt-3 flex-1 overflow-y-auto">
+          {profile ? (
+            <>
+              {chatsLoading ? (
+                <p className="px-3 py-3 text-sm text-white/30">
+                  Loading chats...
+                </p>
+              ) : conversations.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-white/30">
+                  No chats yet
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {conversations.map((chat) => (
+                    <button
+                      key={chat.id}
+                      onClick={() =>
+                        openConversation(chat.id)
+                      }
+                      className={`w-full truncate rounded-xl px-3 py-3 text-left text-sm transition ${
+                        activeConversationId === chat.id
+                          ? "bg-cyan-400/10 text-cyan-200"
+                          : "text-white/60 hover:bg-white/5 hover:text-white"
+                      }`}
+                      title={chat.title}
+                    >
+                      {chat.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/50">
+              Log in to save your chats
+            </div>
+          )}
         </div>
 
-        <div className="mt-auto border-t border-white/10 pt-4">
+        {/* ACCOUNT */}
+
+        <div className="mt-4 border-t border-white/10 pt-4">
           {profile ? (
             <div className="flex items-center gap-3 rounded-xl px-2 py-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-black">
@@ -330,8 +583,6 @@ export default function Home() {
                       </p>
                     </div>
                   </button>
-
-                  {/* ACCOUNT MENU */}
 
                   {accountMenuOpen && (
                     <div className="absolute right-0 top-14 z-50 w-80 rounded-2xl border border-white/10 bg-[#0b0e12] p-4 shadow-2xl">
@@ -455,8 +706,7 @@ export default function Home() {
 
                     <div
                       className={
-                        item.role ===
-                        "user"
+                        item.role === "user"
                           ? "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-cyan-400 px-4 py-3 text-black"
                           : "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-white/90"
                       }
@@ -464,10 +714,8 @@ export default function Home() {
                       {item.text ||
                         (loading &&
                         index ===
-                          messages.length -
-                            1 &&
-                        item.role ===
-                          "axon"
+                          messages.length - 1 &&
+                        item.role === "axon"
                           ? "..."
                           : "")}
                     </div>
