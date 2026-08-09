@@ -11,7 +11,6 @@ type Message = {
 type Profile = {
   id: string;
   email: string | null;
-  plan: "free" | "plus" | "pro";
   is_admin: boolean;
 };
 
@@ -25,7 +24,6 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [planChanging, setPlanChanging] = useState(false);
 
   useEffect(() => {
     loadAccount();
@@ -57,7 +55,7 @@ export default function Home() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, email, plan, is_admin")
+        .select("id, email, is_admin")
         .eq("id", user.id)
         .single();
 
@@ -80,68 +78,6 @@ export default function Home() {
     setAccountMenuOpen(false);
 
     window.location.href = "/";
-  }
-
-  async function changeAdminPlan(
-    plan: "free" | "plus" | "pro"
-  ) {
-    if (!profile?.is_admin || planChanging) {
-      return;
-    }
-
-    setPlanChanging(true);
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        alert("You need to log in.");
-        return;
-      }
-
-      const response = await fetch("/api/admin/set-plan", {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-
-        body: JSON.stringify({
-          plan,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        alert(
-          data.error ||
-            "Axon couldn't change your plan."
-        );
-
-        return;
-      }
-
-      setProfile((prev) => {
-        if (!prev) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          plan,
-        };
-      });
-    } catch (error) {
-      console.error("Plan switch error:", error);
-
-      alert("Axon couldn't change your plan.");
-    } finally {
-      setPlanChanging(false);
-    }
   }
 
   async function sendMessage() {
@@ -173,11 +109,9 @@ export default function Home() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           messages: updatedMessages,
         }),
@@ -262,22 +196,6 @@ export default function Home() {
     window.location.href = "/login";
   }
 
-  function goToPricing() {
-    window.location.href = "/pricing";
-  }
-
-  function getPlanLabel() {
-    if (!profile) {
-      return "";
-    }
-
-    if (profile.is_admin) {
-      return `${profile.plan.toUpperCase()} · ADMIN`;
-    }
-
-    return profile.plan.toUpperCase();
-  }
-
   function getInitial() {
     if (!profile?.email) {
       return "U";
@@ -326,20 +244,7 @@ export default function Home() {
           New conversation
         </div>
 
-        <div className="mt-auto space-y-3 border-t border-white/10 pt-4">
-          <button
-            onClick={goToPricing}
-            className="w-full rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-left transition hover:bg-cyan-400/10"
-          >
-            <p className="text-sm font-medium text-cyan-200">
-              Plans
-            </p>
-
-            <p className="mt-1 text-xs text-white/35">
-              View Free, Plus and Pro
-            </p>
-          </button>
-
+        <div className="mt-auto border-t border-white/10 pt-4">
           {profile ? (
             <div className="flex items-center gap-3 rounded-xl px-2 py-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-black">
@@ -352,7 +257,9 @@ export default function Home() {
                 </p>
 
                 <p className="text-xs font-semibold text-cyan-300">
-                  {getPlanLabel()}
+                  {profile.is_admin
+                    ? "ADMIN"
+                    : "AXON USER"}
                 </p>
               </div>
             </div>
@@ -396,13 +303,6 @@ export default function Home() {
           {/* TOP RIGHT */}
 
           <div className="relative flex items-center gap-2 md:gap-3">
-            <button
-              onClick={goToPricing}
-              className="rounded-xl bg-cyan-400 px-3 py-2 text-xs font-semibold text-black transition hover:bg-cyan-300 md:px-4 md:text-sm"
-            >
-              Plans
-            </button>
-
             {!accountLoading &&
               (profile ? (
                 <>
@@ -424,7 +324,9 @@ export default function Home() {
                       </p>
 
                       <p className="text-[10px] font-semibold text-cyan-300">
-                        {getPlanLabel()}
+                        {profile.is_admin
+                          ? "ADMIN"
+                          : "AXON USER"}
                       </p>
                     </div>
                   </button>
@@ -439,7 +341,7 @@ export default function Home() {
 
                       <div className="mt-2 flex items-center gap-2">
                         <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-300">
-                          {profile.plan.toUpperCase()}
+                          AXON USER
                         </span>
 
                         {profile.is_admin && (
@@ -449,84 +351,9 @@ export default function Home() {
                         )}
                       </div>
 
-                      {/* ADMIN SWITCHER */}
-
-                      {profile.is_admin && (
-                        <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
-                          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-cyan-300">
-                            Admin plan switcher
-                          </p>
-
-                          <div className="grid grid-cols-3 gap-2">
-                            <button
-                              disabled={
-                                planChanging
-                              }
-                              onClick={() =>
-                                changeAdminPlan(
-                                  "free"
-                                )
-                              }
-                              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                                profile.plan ===
-                                "free"
-                                  ? "bg-cyan-400 text-black"
-                                  : "bg-white/5 text-white/60 hover:bg-white/10"
-                              } disabled:opacity-50`}
-                            >
-                              Free
-                            </button>
-
-                            <button
-                              disabled={
-                                planChanging
-                              }
-                              onClick={() =>
-                                changeAdminPlan(
-                                  "plus"
-                                )
-                              }
-                              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                                profile.plan ===
-                                "plus"
-                                  ? "bg-cyan-400 text-black"
-                                  : "bg-white/5 text-white/60 hover:bg-white/10"
-                              } disabled:opacity-50`}
-                            >
-                              Plus
-                            </button>
-
-                            <button
-                              disabled={
-                                planChanging
-                              }
-                              onClick={() =>
-                                changeAdminPlan(
-                                  "pro"
-                                )
-                              }
-                              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                                profile.plan ===
-                                "pro"
-                                  ? "bg-cyan-400 text-black"
-                                  : "bg-white/5 text-white/60 hover:bg-white/10"
-                              } disabled:opacity-50`}
-                            >
-                              Pro
-                            </button>
-                          </div>
-
-                          {planChanging && (
-                            <p className="mt-3 text-center text-xs text-white/40">
-                              Changing plan...
-                            </p>
-                          )}
-                        </div>
-                      )}
-
                       <button
                         onClick={logout}
-                        className="mt-3 w-full rounded-xl border border-white/10 px-4 py-3 text-left text-sm text-white/60 transition hover:bg-white/5 hover:text-white"
+                        className="mt-4 w-full rounded-xl border border-white/10 px-4 py-3 text-left text-sm text-white/60 transition hover:bg-white/5 hover:text-white"
                       >
                         Log out
                       </button>
@@ -600,8 +427,7 @@ export default function Home() {
                   </p>
 
                   <p className="mt-1 text-sm text-white/40">
-                    Explain something
-                    interesting
+                    Explain something interesting
                   </p>
                 </button>
               </div>
@@ -673,12 +499,10 @@ export default function Home() {
                 }
                 onKeyDown={(e) => {
                   if (
-                    e.key ===
-                      "Enter" &&
+                    e.key === "Enter" &&
                     !e.shiftKey
                   ) {
                     e.preventDefault();
-
                     sendMessage();
                   }
                 }}
