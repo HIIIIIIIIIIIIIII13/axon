@@ -184,10 +184,20 @@ export default function PricingPage() {
     try {
       setChangingPlan(plan);
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           plan,
@@ -272,7 +282,6 @@ export default function PricingPage() {
 
   return (
     <main className="min-h-screen bg-[#05070a] text-white">
-      {/* Header */}
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <button
           onClick={() => router.push("/")}
@@ -298,9 +307,7 @@ export default function PricingPage() {
 
               <p className="text-xs font-semibold text-cyan-300">
                 {profile.plan.toUpperCase()}
-                {profile.is_admin
-                  ? " · ADMIN"
-                  : ""}
+                {profile.is_admin ? " · ADMIN" : ""}
               </p>
             </div>
           )}
@@ -314,7 +321,6 @@ export default function PricingPage() {
         </div>
       </header>
 
-      {/* Hero */}
       <section className="px-6 pb-10 pt-16 text-center">
         <div className="mx-auto mb-5 w-fit rounded-full border border-cyan-400/20 bg-cyan-400/5 px-4 py-1.5 text-sm text-cyan-300">
           AXON PLANS
@@ -349,7 +355,6 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Plans */}
       <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-20 md:grid-cols-3">
         {plans.map((plan) => {
           const isCurrent =
@@ -443,7 +448,6 @@ export default function PricingPage() {
         })}
       </section>
 
-      {/* Bottom */}
       <section className="border-t border-white/10 px-6 py-10 text-center">
         <p className="text-sm text-white/35">
           Secure checkout is powered by Stripe sandbox while Axon is in testing.
