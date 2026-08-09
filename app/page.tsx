@@ -106,6 +106,14 @@ export default function Home() {
     setMessage("");
   }
 
+  function goToLogin() {
+    window.location.href = "/login";
+  }
+
+  function goToPricing() {
+    window.location.href = "/pricing";
+  }
+
   return (
     <main className="min-h-screen bg-[#05070a] text-white flex">
       {/* Sidebar */}
@@ -121,7 +129,10 @@ export default function Home() {
             <h1 className="text-xl font-bold tracking-[0.2em] text-cyan-300">
               AXON
             </h1>
-            <p className="text-xs text-white/40">AI Assistant</p>
+
+            <p className="text-xs text-white/40">
+              AI Assistant
+            </p>
           </div>
         </div>
 
@@ -140,15 +151,33 @@ export default function Home() {
           New conversation
         </div>
 
-        <div className="mt-auto border-t border-white/10 pt-4">
+        <div className="mt-auto space-y-3 border-t border-white/10 pt-4">
+          <button
+            onClick={goToPricing}
+            className="w-full rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-left transition hover:bg-cyan-400/10"
+          >
+            <p className="text-sm font-medium text-cyan-200">
+              Upgrade Axon
+            </p>
+
+            <p className="mt-1 text-xs text-white/35">
+              View Free, Plus and Pro
+            </p>
+          </button>
+
           <div className="flex items-center gap-3 rounded-xl px-2 py-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-black">
               U
             </div>
 
             <div>
-              <p className="text-sm font-medium">User</p>
-              <p className="text-xs text-white/40">Axon account</p>
+              <p className="text-sm font-medium">
+                User
+              </p>
+
+              <p className="text-xs text-white/40">
+                Axon account
+              </p>
             </div>
           </div>
         </div>
@@ -166,15 +195,31 @@ export default function Home() {
             />
 
             <div>
-              <h2 className="font-semibold">Axon</h2>
+              <h2 className="font-semibold">
+                Axon
+              </h2>
+
               <p className="text-xs text-cyan-300/70">
                 {loading ? "Thinking..." : "Online"}
               </p>
             </div>
           </div>
 
-          <div className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs text-cyan-200">
-            AXON AI
+          {/* New top-right buttons */}
+          <div className="flex items-center gap-2 md:gap-3">
+            <button
+              onClick={goToLogin}
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10 hover:text-white md:px-4 md:text-sm"
+            >
+              Login / Sign Up
+            </button>
+
+            <button
+              onClick={goToPricing}
+              className="rounded-xl bg-cyan-400 px-3 py-2 text-xs font-semibold text-black transition hover:bg-cyan-300 md:px-4 md:text-sm"
+            >
+              Plans
+            </button>
           </div>
         </header>
 
@@ -197,16 +242,21 @@ export default function Home() {
               </h2>
 
               <p className="mt-3 max-w-lg text-white/45">
-                Ask questions, create ideas, write code, solve problems, and
-                explore anything.
+                Ask questions, create ideas, write code, solve problems,
+                and explore anything.
               </p>
 
               <div className="mt-8 grid w-full max-w-2xl gap-3 sm:grid-cols-2">
                 <button
-                  onClick={() => setMessage("Help me build an app")}
+                  onClick={() =>
+                    setMessage("Help me build an app")
+                  }
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                 >
-                  <p className="font-medium">Build something</p>
+                  <p className="font-medium">
+                    Build something
+                  </p>
+
                   <p className="mt-1 text-sm text-white/40">
                     Help me build an app
                   </p>
@@ -218,7 +268,10 @@ export default function Home() {
                   }
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                 >
-                  <p className="font-medium">Learn something</p>
+                  <p className="font-medium">
+                    Learn something
+                  </p>
+
                   <p className="mt-1 text-sm text-white/40">
                     Explain something interesting
                   </p>
@@ -268,15 +321,23 @@ export default function Home() {
         <div className="border-t border-white/5 bg-black/20 px-4 py-5">
           <div className="mx-auto max-w-3xl">
             <div className="flex items-end gap-3 rounded-3xl border border-white/10 bg-white/5 p-3 shadow-[0_0_40px_rgba(0,0,0,0.3)] backdrop-blur-xl focus-within:border-cyan-400/30">
-              <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white">
+              <button
+                type="button"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl text-white/50 transition hover:bg-white/10 hover:text-white"
+              >
                 +
               </button>
 
               <textarea
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) =>
+                  setMessage(e.target.value)
+                }
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey
+                  ) {
                     e.preventDefault();
                     sendMessage();
                   }
