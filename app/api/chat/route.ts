@@ -8,12 +8,19 @@ type AxonMessage = {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const messages: AxonMessage[] = body.messages || [];
+
+    const messages: AxonMessage[] =
+      body.messages || [];
 
     if (!process.env.OPENROUTER_API_KEY) {
       return NextResponse.json(
-        { error: "OPENROUTER_API_KEY is missing." },
-        { status: 500 }
+        {
+          error:
+            "OPENROUTER_API_KEY is missing.",
+        },
+        {
+          status: 500,
+        }
       );
     }
 
@@ -26,7 +33,8 @@ You are Axon, an intelligent AI assistant.
 Your name is Axon.
 
 Be helpful, intelligent, friendly, and clear.
-Answer the user's questions directly.
+
+Answer the user's questions directly and naturally.
 
 You can help with:
 - coding
@@ -34,53 +42,91 @@ You can help with:
 - learning
 - brainstorming
 - problem solving
+- mathematics
+- science
+- technology
 - general questions
+
+When helping with code:
+- provide clear and correct code
+- explain important steps simply
+- preserve existing working code when possible
+- point out errors clearly
+
+When teaching:
+- explain things in an easy-to-understand way
+- use examples when helpful
+- avoid unnecessary complexity
 
 Never claim to be ChatGPT.
 
-If someone asks who you are, say you are Axon.
+If someone asks who you are, say:
+"I’m Axon, an AI assistant."
 
-Keep answers natural and useful.
+Do not mention OpenRouter or the underlying model unless the user specifically asks what technology powers Axon.
+
+Keep answers natural, useful, and focused on what the user asked.
         `,
       },
 
       ...messages.map((message) => ({
-        role: message.role === "axon" ? "assistant" : "user",
+        role:
+          message.role === "axon"
+            ? "assistant"
+            : "user",
+
         content: message.text,
       })),
     ];
 
-    const openRouterResponse = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
+    const openRouterResponse =
+      await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
 
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "http://localhost:3000",
-          "X-Title": "Axon AI",
-        },
+          headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 
-        body: JSON.stringify({
-          model: "openrouter/free",
-          messages: formattedMessages,
-          stream: true,
-        }),
-      }
-    );
+            "Content-Type":
+              "application/json",
+
+            "HTTP-Referer":
+              "https://axon-d7ro.vercel.app",
+
+            "X-Title":
+              "Axon AI",
+          },
+
+          body: JSON.stringify({
+            model:
+              "openai/gpt-oss-120b:free",
+
+            messages:
+              formattedMessages,
+
+            stream: true,
+          }),
+        }
+      );
 
     if (!openRouterResponse.ok) {
-      const errorText = await openRouterResponse.text();
+      const errorText =
+        await openRouterResponse.text();
 
-      console.error("OpenRouter error:", errorText);
+      console.error(
+        "OpenRouter error:",
+        errorText
+      );
 
       return NextResponse.json(
         {
-          error: "Axon couldn't generate a response.",
+          error:
+            "Axon couldn't generate a response.",
         },
         {
-          status: openRouterResponse.status,
+          status:
+            openRouterResponse.status,
         }
       );
     }
@@ -88,7 +134,8 @@ Keep answers natural and useful.
     if (!openRouterResponse.body) {
       return NextResponse.json(
         {
-          error: "OpenRouter returned no stream.",
+          error:
+            "OpenRouter returned no stream.",
         },
         {
           status: 500,
@@ -96,78 +143,123 @@ Keep answers natural and useful.
       );
     }
 
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
+    const encoder =
+      new TextEncoder();
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = openRouterResponse.body!.getReader();
+    const decoder =
+      new TextDecoder();
 
-        let buffer = "";
+    const stream =
+      new ReadableStream({
+        async start(controller) {
+          const reader =
+            openRouterResponse.body!.getReader();
 
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
+          let buffer = "";
 
-            if (done) break;
+          try {
+            while (true) {
+              const {
+                done,
+                value,
+              } =
+                await reader.read();
 
-            buffer += decoder.decode(value, {
-              stream: true,
-            });
-
-            const lines = buffer.split("\n");
-
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              const trimmedLine = line.trim();
-
-              if (!trimmedLine.startsWith("data:")) {
-                continue;
+              if (done) {
+                break;
               }
 
-              const data = trimmedLine.slice(5).trim();
+              buffer +=
+                decoder.decode(
+                  value,
+                  {
+                    stream: true,
+                  }
+                );
 
-              if (data === "[DONE]") {
-                continue;
-              }
+              const lines =
+                buffer.split("\n");
 
-              try {
-                const parsed = JSON.parse(data);
+              buffer =
+                lines.pop() || "";
 
-                const content =
-                  parsed?.choices?.[0]?.delta?.content;
+              for (
+                const line of lines
+              ) {
+                const trimmedLine =
+                  line.trim();
 
-                if (content) {
-                  controller.enqueue(
-                    encoder.encode(content)
-                  );
+                if (
+                  !trimmedLine.startsWith(
+                    "data:"
+                  )
+                ) {
+                  continue;
                 }
-              } catch {
-                // Ignore non-JSON streaming lines
+
+                const data =
+                  trimmedLine
+                    .slice(5)
+                    .trim();
+
+                if (
+                  data === "[DONE]"
+                ) {
+                  continue;
+                }
+
+                try {
+                  const parsed =
+                    JSON.parse(data);
+
+                  const content =
+                    parsed
+                      ?.choices?.[0]
+                      ?.delta?.content;
+
+                  if (content) {
+                    controller.enqueue(
+                      encoder.encode(
+                        content
+                      )
+                    );
+                  }
+                } catch {
+                  // Ignore non-JSON
+                  // streaming lines.
+                }
               }
             }
+          } catch (error) {
+            console.error(
+              "Axon streaming error:",
+              error
+            );
+          } finally {
+            controller.close();
           }
-        } catch (error) {
-          console.error("Axon streaming error:", error);
-        } finally {
-          controller.close();
-        }
-      },
-    });
+        },
+      });
 
     return new Response(stream, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
+        "Content-Type":
+          "text/plain; charset=utf-8",
+
+        "Cache-Control":
+          "no-cache",
       },
     });
   } catch (error) {
-    console.error("Axon API error:", error);
+    console.error(
+      "Axon API error:",
+      error
+    );
 
     return NextResponse.json(
       {
-        error: "Axon couldn't generate a response.",
+        error:
+          "Axon couldn't generate a response.",
       },
       {
         status: 500,

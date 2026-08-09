@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 type Message = {
   role: "user" | "axon";
   text: string;
+  image?: string | null;
 };
 
 type Profile = {
@@ -27,6 +28,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
@@ -35,6 +37,7 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] =
     useState<string | null>(null);
+
   const [chatsLoading, setChatsLoading] = useState(false);
 
   useEffect(() => {
@@ -132,7 +135,7 @@ export default function Home() {
       await supabase
         .from("messages")
         .select(
-          "role, content, created_at"
+          "role, content, image_url, created_at"
         )
         .eq(
           "conversation_id",
@@ -158,6 +161,9 @@ export default function Home() {
           | "axon",
 
         text: item.content,
+
+        image:
+          item.image_url || null,
       }));
 
     setMessages(loadedMessages);
@@ -234,6 +240,7 @@ export default function Home() {
 
     setConversations((prev) => [
       newConversation,
+
       ...prev.filter(
         (chat) =>
           chat.id !==
@@ -247,7 +254,8 @@ export default function Home() {
   async function saveMessage(
     conversationId: string,
     role: "user" | "axon",
-    content: string
+    content: string,
+    imageUrl?: string | null
   ) {
     const { error } =
       await supabase
@@ -257,7 +265,11 @@ export default function Home() {
             conversationId,
 
           role,
+
           content,
+
+          image_url:
+            imageUrl || null,
         });
 
     if (error) {
@@ -311,6 +323,7 @@ export default function Home() {
 
       return [
         updatedConversation,
+
         ...prev.filter(
           (chat) =>
             chat.id !==
@@ -379,6 +392,154 @@ export default function Home() {
     }
   }
 
+  function isImageRequest(
+    text: string
+  ) {
+    const lower =
+      text.toLowerCase().trim();
+
+    const imageWords = [
+      "image",
+      "picture",
+      "photo",
+      "artwork",
+      "illustration",
+      "poster",
+      "wallpaper",
+    ];
+
+    const creationWords = [
+      "create",
+      "generate",
+      "make",
+      "draw",
+      "design",
+    ];
+
+    const hasImageWord =
+      imageWords.some((word) =>
+        lower.includes(word)
+      );
+
+    const hasCreationWord =
+      creationWords.some((word) =>
+        lower.includes(word)
+      );
+
+    return (
+      hasImageWord &&
+      hasCreationWord
+    );
+  }
+
+  async function generateImage(
+    prompt: string,
+    conversationId:
+      | string
+      | null
+  ) {
+    setGeneratingImage(true);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "axon",
+        text:
+          "Creating your image...",
+        image: null,
+      },
+    ]);
+
+    try {
+      const response =
+        await fetch("/api/image", {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            prompt,
+          }),
+        });
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Image generation failed."
+        );
+      }
+
+      if (!data.image) {
+        throw new Error(
+          "No image was returned."
+        );
+      }
+
+      const imageMessage: Message = {
+        role: "axon",
+        text:
+          "Here's the image I created for you.",
+        image: data.image,
+      };
+
+      setMessages((prev) => {
+        const updated = [
+          ...prev,
+        ];
+
+        updated[
+          updated.length - 1
+        ] = imageMessage;
+
+        return updated;
+      });
+
+      if (
+        profile &&
+        conversationId
+      ) {
+        await saveMessage(
+          conversationId,
+          "axon",
+          imageMessage.text,
+          data.image
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Image generation error:",
+        error
+      );
+
+      const errorMessage =
+        "I couldn't generate that image. Please try again.";
+
+      setMessages((prev) => {
+        const updated = [
+          ...prev,
+        ];
+
+        updated[
+          updated.length - 1
+        ] = {
+          role: "axon",
+          text: errorMessage,
+          image: null,
+        };
+
+        return updated;
+      });
+    } finally {
+      setGeneratingImage(false);
+    }
+  }
+
   async function logout() {
     await supabase.auth.signOut();
 
@@ -402,22 +563,22 @@ export default function Home() {
     const userMessage =
       message.trim();
 
+    const imageRequest =
+      isImageRequest(
+        userMessage
+      );
+
+    const userEntry: Message = {
+      role: "user",
+      text: userMessage,
+      image: null,
+    };
+
     const updatedMessages: Message[] =
       [
         ...messages,
-        {
-          role: "user",
-          text: userMessage,
-        },
+        userEntry,
       ];
-
-    setMessages([
-      ...updatedMessages,
-      {
-        role: "axon",
-        text: "",
-      },
-    ]);
 
     setMessage("");
     setLoading(true);
@@ -447,6 +608,36 @@ export default function Home() {
         );
       }
 
+      /*
+       * IMAGE GENERATION
+       */
+
+      if (imageRequest) {
+        setMessages(
+          updatedMessages
+        );
+
+        await generateImage(
+          userMessage,
+          conversationId
+        );
+
+        return;
+      }
+
+      /*
+       * NORMAL AI CHAT
+       */
+
+      setMessages([
+        ...updatedMessages,
+        {
+          role: "axon",
+          text: "",
+          image: null,
+        },
+      ]);
+
       const response =
         await fetch("/api/chat", {
           method: "POST",
@@ -458,7 +649,15 @@ export default function Home() {
 
           body: JSON.stringify({
             messages:
-              updatedMessages,
+              updatedMessages.map(
+                (item) => ({
+                  role:
+                    item.role,
+
+                  text:
+                    item.text,
+                })
+              ),
           }),
         });
 
@@ -516,6 +715,7 @@ export default function Home() {
           ] = {
             role: "axon",
             text: axonReply,
+            image: null,
           };
 
           return newMessages;
@@ -544,14 +744,32 @@ export default function Home() {
           ...prev,
         ];
 
-        newMessages[
-          newMessages.length - 1
-        ] = {
-          role: "axon",
+        const errorMessage = {
+          role: "axon" as const,
 
           text:
             "I couldn't connect to my AI brain. Please try again.",
+
+          image: null,
         };
+
+        if (
+          newMessages.length >
+            0 &&
+          newMessages[
+            newMessages.length -
+              1
+          ].role === "axon"
+        ) {
+          newMessages[
+            newMessages.length -
+              1
+          ] = errorMessage;
+        } else {
+          newMessages.push(
+            errorMessage
+          );
+        }
 
         return newMessages;
       });
@@ -698,8 +916,7 @@ export default function Home() {
             </>
           ) : (
             <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/50">
-              Log in to save your
-              chats
+              Log in to save your chats
             </div>
           )}
         </div>
@@ -755,7 +972,9 @@ export default function Home() {
               </h2>
 
               <p className="text-xs text-cyan-300/70">
-                {loading
+                {generatingImage
+                  ? "Creating image..."
+                  : loading
                   ? "Thinking..."
                   : "Online"}
               </p>
@@ -855,13 +1074,12 @@ export default function Home() {
               </div>
 
               <h2 className="mt-7 text-3xl font-bold md:text-4xl">
-                What can Axon help
-                with?
+                What can Axon help with?
               </h2>
 
               <p className="mt-3 max-w-lg text-white/45">
                 Ask questions, create
-                ideas, write code, solve
+                images, write code, solve
                 problems, and explore
                 anything.
               </p>
@@ -887,18 +1105,17 @@ export default function Home() {
                 <button
                   onClick={() =>
                     setMessage(
-                      "Explain something interesting"
+                      "Create an image of a futuristic city at night"
                     )
                   }
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                 >
                   <p className="font-medium">
-                    Learn something
+                    Create an image
                   </p>
 
                   <p className="mt-1 text-sm text-white/40">
-                    Explain something
-                    interesting
+                    Generate something amazing
                   </p>
                 </button>
               </div>
@@ -933,7 +1150,7 @@ export default function Home() {
                         item.role ===
                         "user"
                           ? "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-cyan-400 px-4 py-3 text-black"
-                          : "max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-white/90"
+                          : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-white/90"
                       }
                     >
                       {item.text ||
@@ -945,6 +1162,18 @@ export default function Home() {
                           "axon"
                           ? "..."
                           : "")}
+
+                      {item.image && (
+                        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+                          <img
+                            src={
+                              item.image
+                            }
+                            alt="Generated by Axon"
+                            className="h-auto w-full object-contain"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -983,7 +1212,11 @@ export default function Home() {
                     sendMessage();
                   }
                 }}
-                placeholder="Message Axon..."
+                placeholder={
+                  generatingImage
+                    ? "Axon is creating your image..."
+                    : "Message Axon..."
+                }
                 rows={1}
                 disabled={
                   loading
@@ -1007,8 +1240,7 @@ export default function Home() {
 
             <p className="mt-3 text-center text-xs text-white/25">
               Axon can make mistakes.
-              Check important
-              information.
+              Check important information.
             </p>
           </div>
         </div>
