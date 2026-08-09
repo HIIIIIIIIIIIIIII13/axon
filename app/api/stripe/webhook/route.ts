@@ -59,6 +59,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    /*
+     * Successful new subscription
+     */
     if (
       event.type ===
       "checkout.session.completed"
@@ -84,7 +87,8 @@ export async function POST(request: Request) {
 
         return NextResponse.json(
           {
-            error: "Missing subscription metadata.",
+            error:
+              "Missing subscription metadata.",
           },
           {
             status: 400,
@@ -102,7 +106,10 @@ export async function POST(request: Request) {
           ? session.subscription
           : session.subscription?.id;
 
-      if (!customerId || !subscriptionId) {
+      if (
+        !customerId ||
+        !subscriptionId
+      ) {
         console.error(
           "Missing Stripe customer or subscription ID."
         );
@@ -118,14 +125,17 @@ export async function POST(request: Request) {
         );
       }
 
-      const { error } = await supabaseAdmin
-        .from("profiles")
-        .update({
-          plan,
-          stripe_customer_id: customerId,
-          stripe_subscription_id: subscriptionId,
-        })
-        .eq("id", userId);
+      const { error } =
+        await supabaseAdmin
+          .from("profiles")
+          .update({
+            plan,
+            stripe_customer_id:
+              customerId,
+            stripe_subscription_id:
+              subscriptionId,
+          })
+          .eq("id", userId);
 
       if (error) {
         console.error(
@@ -157,6 +167,106 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * Subscription ended / cancelled
+     */
+    if (
+      event.type ===
+      "customer.subscription.deleted"
+    ) {
+      const subscription =
+        event.data.object as Stripe.Subscription;
+
+      const subscriptionId =
+        subscription.id;
+
+      const customerId =
+        typeof subscription.customer ===
+        "string"
+          ? subscription.customer
+          : subscription.customer.id;
+
+      console.log(
+        `Stripe subscription ended: ${subscriptionId}`
+      );
+
+      const {
+        data: profile,
+        error: profileLookupError,
+      } = await supabaseAdmin
+        .from("profiles")
+        .select(
+          "id, email, plan, stripe_subscription_id"
+        )
+        .eq(
+          "stripe_subscription_id",
+          subscriptionId
+        )
+        .maybeSingle();
+
+      if (profileLookupError) {
+        console.error(
+          "Could not find Axon user for cancelled subscription:",
+          profileLookupError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Could not find subscription owner.",
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      if (!profile) {
+        console.warn(
+          `No Axon profile found for Stripe subscription ${subscriptionId}`
+        );
+
+        return NextResponse.json({
+          received: true,
+        });
+      }
+
+      const { error: updateError } =
+        await supabaseAdmin
+          .from("profiles")
+          .update({
+            plan: "free",
+            stripe_subscription_id:
+              null,
+          })
+          .eq("id", profile.id);
+
+      if (updateError) {
+        console.error(
+          "Could not downgrade Axon user:",
+          updateError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Could not downgrade Axon subscription.",
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      console.log(
+        `Axon user ${profile.id} downgraded to free`
+      );
+
+      console.log(
+        `Stripe customer retained: ${customerId}`
+      );
+    }
+
     return NextResponse.json({
       received: true,
     });
@@ -168,7 +278,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error: "Webhook processing failed.",
+        error:
+          "Webhook processing failed.",
       },
       {
         status: 500,
