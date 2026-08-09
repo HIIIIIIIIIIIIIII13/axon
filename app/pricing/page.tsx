@@ -159,7 +159,7 @@ export default function PricingPage() {
     }
   }
 
-  function handlePlanClick(plan: PlanName) {
+  async function handlePlanClick(plan: PlanName) {
     if (!profile) {
       router.push("/login");
       return;
@@ -170,20 +170,51 @@ export default function PricingPage() {
     }
 
     if (profile.is_admin) {
-      switchAdminPlan(plan);
+      await switchAdminPlan(plan);
       return;
     }
 
     if (plan === "free") {
       alert(
-        "Downgrading will be added when we connect subscription management."
+        "Subscription downgrades will be added when we build subscription management."
       );
       return;
     }
 
-    alert(
-      `${plan === "plus" ? "Plus" : "Pro"} checkout will be connected next.`
-    );
+    try {
+      setChangingPlan(plan);
+
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          plan,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Could not start checkout."
+        );
+      }
+
+      if (!data.url) {
+        throw new Error(
+          "Stripe did not return a checkout URL."
+        );
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      console.error("Checkout error:", error);
+      alert("Could not start Stripe checkout.");
+    } finally {
+      setChangingPlan(null);
+    }
   }
 
   function getButtonText(plan: PlanName) {
@@ -196,7 +227,9 @@ export default function PricingPage() {
         return "Start Free";
       }
 
-      return plan === "plus" ? "Get Plus" : "Get Pro";
+      return plan === "plus"
+        ? "Get Plus"
+        : "Get Pro";
     }
 
     if (profile.plan === plan) {
@@ -209,15 +242,22 @@ export default function PricingPage() {
       }
 
       return `Switch to ${
-        plan.charAt(0).toUpperCase() + plan.slice(1)
+        plan.charAt(0).toUpperCase() +
+        plan.slice(1)
       }`;
+    }
+
+    if (changingPlan === plan) {
+      return "Opening checkout...";
     }
 
     if (plan === "free") {
       return "Free";
     }
 
-    return plan === "plus" ? "Upgrade to Plus" : "Upgrade to Pro";
+    return plan === "plus"
+      ? "Upgrade to Plus"
+      : "Upgrade to Pro";
   }
 
   function isDisabled(plan: PlanName) {
@@ -258,7 +298,9 @@ export default function PricingPage() {
 
               <p className="text-xs font-semibold text-cyan-300">
                 {profile.plan.toUpperCase()}
-                {profile.is_admin ? " · ADMIN" : ""}
+                {profile.is_admin
+                  ? " · ADMIN"
+                  : ""}
               </p>
             </div>
           )}
@@ -404,8 +446,7 @@ export default function PricingPage() {
       {/* Bottom */}
       <section className="border-t border-white/10 px-6 py-10 text-center">
         <p className="text-sm text-white/35">
-          Plus and Pro payments are not active yet. We&apos;ll connect secure
-          checkout next.
+          Secure checkout is powered by Stripe sandbox while Axon is in testing.
         </p>
       </section>
     </main>
