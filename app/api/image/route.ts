@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
     const prompt = body.prompt;
 
     if (!prompt || typeof prompt !== "string") {
@@ -16,14 +17,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey =
-      process.env.OPENROUTER_API_KEY;
+    const accountId =
+      process.env.CLOUDFLARE_ACCOUNT_ID;
 
-    if (!apiKey) {
+    const apiToken =
+      process.env.CLOUDFLARE_API_TOKEN;
+
+    if (!accountId) {
       return NextResponse.json(
         {
           error:
-            "OPENROUTER_API_KEY is missing.",
+            "CLOUDFLARE_ACCOUNT_ID is missing.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    if (!apiToken) {
+      return NextResponse.json(
+        {
+          error:
+            "CLOUDFLARE_API_TOKEN is missing.",
         },
         {
           status: 500,
@@ -32,28 +48,26 @@ export async function POST(request: Request) {
     }
 
     const response = await fetch(
-      "https://openrouter.ai/api/v1/images",
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
       {
         method: "POST",
 
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization:
+            `Bearer ${apiToken}`,
+
           "Content-Type":
             "application/json",
-
-          "HTTP-Referer":
-            "https://axon-d7ro.vercel.app",
-
-          "X-Title": "Axon AI",
         },
 
         body: JSON.stringify({
-          model:
-            "openai/gpt-image-1-mini",
-
           prompt,
 
-          n: 1,
+          steps: 4,
+
+          seed: Math.floor(
+            Math.random() * 1000000000
+          ),
         }),
       }
     );
@@ -62,14 +76,14 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       console.error(
-        "OpenRouter image error:",
+        "Cloudflare image error:",
         JSON.stringify(data)
       );
 
       return NextResponse.json(
         {
           error:
-            data?.error?.message ||
+            data?.errors?.[0]?.message ||
             "Axon couldn't generate the image.",
         },
         {
@@ -78,19 +92,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const generatedImage =
-      data?.data?.[0];
+    const base64Image =
+      data?.result?.image;
 
-    if (!generatedImage) {
+    if (!base64Image) {
       console.error(
-        "No image in OpenRouter response:",
-        data
+        "Cloudflare returned no image:",
+        JSON.stringify(data)
       );
 
       return NextResponse.json(
         {
           error:
-            "OpenRouter did not return an image.",
+            "Cloudflare did not return an image.",
         },
         {
           status: 500,
@@ -98,44 +112,12 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * OpenRouter's Image API normally
-     * returns the generated image as
-     * base64 in b64_json.
-     */
+    const image =
+      `data:image/jpeg;base64,${base64Image}`;
 
-    if (generatedImage.b64_json) {
-      return NextResponse.json({
-        image:
-          `data:image/png;base64,${generatedImage.b64_json}`,
-      });
-    }
-
-    /*
-     * Keep URL support just in case a
-     * provider returns a URL instead.
-     */
-
-    if (generatedImage.url) {
-      return NextResponse.json({
-        image: generatedImage.url,
-      });
-    }
-
-    console.error(
-      "Unknown image response:",
-      generatedImage
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "The image provider returned an unsupported response.",
-      },
-      {
-        status: 500,
-      }
-    );
+    return NextResponse.json({
+      image,
+    });
   } catch (error) {
     console.error(
       "Axon image API error:",
